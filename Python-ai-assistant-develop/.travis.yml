@@ -1,0 +1,55 @@
+language: python
+cache: pip
+
+os: linux
+dist: focal
+python: 3.8
+
+jobs:
+  include:
+
+    - stage: test
+      before_install:
+        - sudo bash bin/deploy/install_system_dependencies.sh
+      install:
+        - bash bin/deploy/install_python_dependencies.sh
+      script:
+        # Run tests by using Travis virtual env (quick way, pip deps are cached)
+        - sudo bash bin/tests/run_tests_on_travis.sh
+
+    - stage: merge (develop --> master)
+      install:
+        - sudo bash setup.sh
+      script:
+        # Run tests with the same way as locally
+        # With this way setup script (setup.sh) is validated
+        - sudo bash run_tests.sh
+      after_success:
+        - sudo bash bin/deploy/merge_develop_to_master.sh
+
+    - stage: deploy
+      install: skip
+      script: skip
+      env:
+        - RELEASE_PACKAGE=jarvis_package.tar
+      before_deploy:
+        - bash bin/deploy/new_release_auto_tagging.sh
+        - bash bin/deploy/create_release_package.sh
+      deploy:
+        provider: releases
+        skip_cleanup: true
+        api_key: $GITHUB_TOKEN
+        file: $RELEASE_PACKAGE
+        on:
+          branch: master
+
+stages:
+  - name: test
+    if: NOT (branch IN (develop,master)) AND (NOT(branch==^Release.*))
+  - name: merge (develop --> master)
+    if: branch==develop AND NOT(type==pull_request)
+  - name: deploy
+    if: branch==master
+
+notifications:
+  email: false
